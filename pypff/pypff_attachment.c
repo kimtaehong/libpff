@@ -71,7 +71,11 @@ PyGetSetDef pypff_attachment_object_get_set_definitions[] = {
 	  (setter) 0,
 	  "The data size.",
 	  NULL },
-
+	{ "long_filename",
+	  (getter) pypff_attachment_get_long_filename,
+	  (setter) 0,
+	  "The attachment long filename.",
+	  NULL },
 	/* Sentinel */
 	{ NULL, NULL, NULL, NULL, NULL }
 };
@@ -221,6 +225,134 @@ PyObject *pypff_attachment_get_size(
 	                  (uint64_t) size );
 
 	return( integer_object );
+}
+
+/*
+ *
+ */
+
+PyObject *pypff_attachment_get_long_filename(
+           pypff_item_t *pypff_item,
+           PyObject *arguments PYPFF_ATTRIBUTE_UNUSED )
+{
+	PyObject *string_object	   = NULL;
+	libcerror_error_t *error   = NULL;
+	const char *errors         = NULL;
+	uint8_t *value_string      = NULL;
+	static char *function      = "pypff_attachment_get_long_filename";
+	size32_t value_string_size = 0;
+	int result				   = 0;
+
+	PYPFF_UNREFERENCED_PARAMETER( arguments )
+
+	if( pypff_item == NULL )
+	{
+		PyErr_Format(
+		 PyExc_ValueError,
+		 "%s: invalid item.",
+		 function );
+
+		return( NULL );
+	}
+	Py_BEGIN_ALLOW_THREADS
+	result = libpff_attachment_get_utf8_long_filename_size(
+				pypff_item->item,
+				&value_string_size,
+				&error );
+	Py_END_ALLOW_THREADS
+
+	if(-1 == result)
+	{
+		pypff_error_raise(
+		 error,
+		 PyExc_IOError,
+		 "%s: unable to retrieve subject size.",
+		 function );
+
+		libcerror_error_free(
+		 &error );
+
+		goto on_error;
+	}
+	else if( ( result == 0 )
+	      || ( value_string_size == 0 ) )
+	{
+		Py_IncRef(
+		 Py_None );
+
+		return( Py_None );
+	}
+	
+	value_string = (uint8_t*) PyMem_Malloc(
+					sizeof(uint8_t) * value_string_size);
+
+	if( value_string == NULL )
+	{
+		PyErr_Format(
+		 PyExc_IOError,
+		 "%s: unable to create subject.",
+		 function );
+
+		goto on_error;
+	}
+	Py_BEGIN_ALLOW_THREADS
+	result = libpff_message_get_entry_value_utf8_string(
+		pypff_item->item,
+		LIBPFF_ENTRY_TYPE_ATTACHMENT_FILENAME_LONG,
+		value_string,
+		value_string_size,
+		&error );
+	Py_END_ALLOW_THREADS
+
+	if( result != 1 )
+	{
+		pypff_error_raise(
+		 error,
+		 PyExc_IOError,
+		 "%s: unable to retrieve subject.",
+		 function );
+
+		libcerror_error_free(
+		 &error );
+
+		goto on_error;
+	}
+	/* Ignore the subject control codes for now
+	 */
+	if( value_string[ 0 ] < 0x20 )
+	{
+		/* Pass the string length to PyUnicode_DecodeUTF8
+		 * otherwise it makes the end of string character is part
+		 * of the string
+		 */
+		string_object = PyUnicode_DecodeUTF8(
+				 (char *) &( value_string[ 2 ] ),
+				 (Py_ssize_t) value_string_size - 3,
+				 errors );
+	}
+	else
+	{
+		/* Pass the string length to PyUnicode_DecodeUTF8
+		 * otherwise it makes the end of string character is part
+		 * of the string
+		 */
+		string_object = PyUnicode_DecodeUTF8(
+				 (char *) value_string,
+				 (Py_ssize_t) value_string_size - 1,
+				 errors );
+	}
+	PyMem_Free(
+	 value_string );
+
+	return( string_object );
+
+on_error:
+	if( value_string != NULL )
+	{
+		PyMem_Free(
+		 value_string );
+	}
+	return( NULL );
 }
 
 /* Reads (attachment) data at the current offset into a buffer
